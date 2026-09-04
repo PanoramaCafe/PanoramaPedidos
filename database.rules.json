@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "catalog": {
+      ".read": true,
+      ".write": true
+    },
+    "orders": {
+      ".read": true,
+      ".write": true,
+      "$orderId": {
+        ".validate": "newData.hasChildren(['schemaVersion','appId','restaurant','orderId','createdAt','status','customer','fulfillment','items','pricing'])"
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}
