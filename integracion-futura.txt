@@ -1,0 +1,41 @@
+PANORAMA PEDIDOS — CONTRATO DE INTEGRACIÓN V1
+
+Esta primera versión contiene únicamente la APP CLIENTE.
+La app está preparada para enviar pedidos a una app receptora futura mediante HTTP POST.
+
+CONFIGURACIÓN
+En index.html, dentro de CONFIG:
+  orderEndpoint: ''
+
+Cuando exista la app receptora, colocar aquí su endpoint HTTPS.
+
+FORMATO DEL PEDIDO
+Cada envío usa un objeto JSON con:
+- schemaVersion: versión del contrato (actualmente 1)
+- appId: panorama-pedidos-cliente
+- restaurant: Panorama Café
+- orderId: identificador público P-YYMMDD-XXXX
+- createdAt: fecha/hora ISO 8601
+- status: pending_confirmation
+- customer: name, phone
+- fulfillment: type (pickup/dinein), table
+- note
+- items: producto, variante, modificadores, cantidad, precios y priceToConfirm
+- pricing: subtotal, total y hasVariableItems
+- ageConfirmed
+- source: canal y mesa detectada desde URL
+
+REGLA IMPORTANTE
+El PDF del menú 2026 es la fuente comercial de esta app. Los datos de Loyverse no se usan para decidir qué productos aparecen.
+
+COMPORTAMIENTO ACTUAL
+Si orderEndpoint está vacío, la app funciona en modo de prueba:
+- guarda el pedido en localStorage bajo panorama_pending_orders
+- emite un evento por BroadcastChannel panorama-orders cuando el navegador lo permite
+- no intenta enviarlo por WhatsApp
+
+COMPORTAMIENTO FUTURO
+Al configurar orderEndpoint, el mismo pedido se enviará por POST application/json a la app receptora.
+La app receptora deberá responder con HTTP 2xx para confirmar que recibió el pedido.
+
+NO SE DEBE CAMBIAR EL FORMATO SIN INCREMENTAR schemaVersion.
