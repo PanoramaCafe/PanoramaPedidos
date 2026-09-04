@@ -3,18 +3,42 @@
   const cfg=window.PANORAMA_SUPABASE||{};
   const CATALOG_KEY='panorama_menu_catalog_v1', SETTINGS_KEY='panorama_menu_settings_v1', SESSION_KEY='panorama_supabase_session_v1';
   const embedded=JSON.parse(document.getElementById('panorama-initial-catalog')?.textContent||'[]');
+  let loginInProgress=false;
   function clone(x){return JSON.parse(JSON.stringify(x));}
   function localLoad(){try{const x=JSON.parse(localStorage.getItem(CATALOG_KEY)||'null');if(Array.isArray(x)&&x.length)return x}catch(e){}return clone(embedded)}
   function localSave(c){try{localStorage.setItem(CATALOG_KEY,JSON.stringify(c))}catch(e){}}
   function configured(){return !!(cfg.url&&cfg.key)}
   function base(){return String(cfg.url||'').replace(/\/$/,'')}
-  function session(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(e){return null}}
-  function authHeaders(){const s=session();return {'Content-Type':'application/json','apikey':cfg.key,'Authorization':'Bearer '+(s?.access_token||cfg.key)}}
-  async function rest(path,opts={}){const r=await fetch(base()+path,Object.assign({headers:authHeaders()},opts));let body=null;try{body=await r.json()}catch(e){}if(!r.ok){const msg=body?.message||body?.error_description||body?.hint||('Supabase respondió '+r.status);throw new Error(msg)}return body}
+  function getStoredSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(e){return null}}
+  function authHeaders(){const s=getStoredSession();return {'Content-Type':'application/json','apikey':cfg.key,'Authorization':'Bearer '+(s?.access_token||cfg.key)}}
+  async function signIn(email,password){
+    const r=await fetch(base()+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.key},body:JSON.stringify({email,password})});
+    let body=null;try{body=await r.json()}catch(e){} if(!r.ok)throw new Error(body?.error_description||body?.msg||'No se pudo iniciar sesión.');
+    localStorage.setItem(SESSION_KEY,JSON.stringify(body)); return body;
+  }
+  async function ensureStaffLogin(){
+    if(getStoredSession()?.access_token||loginInProgress)return !!getStoredSession()?.access_token;
+    loginInProgress=true;
+    try{
+      const email=window.prompt('Acceso de personal\nCorreo de Supabase:'); if(!email)return false;
+      const password=window.prompt('Contraseña:'); if(!password)return false;
+      await signIn(email.trim(),password); return true;
+    }catch(e){alert(e.message||'No se pudo iniciar sesión.');return false}
+    finally{loginInProgress=false}
+  }
+  async function rest(path,opts={},retry=true){
+    const r=await fetch(base()+path,Object.assign({headers:authHeaders()},opts));
+    let body=null;try{body=await r.json()}catch(e){}
+    if(!r.ok){
+      if(r.status===401&&retry){const ok=await ensureStaffLogin();if(ok)return rest(path,opts,false)}
+      throw new Error(body?.message||body?.error_description||body?.hint||('Supabase respondió '+r.status));
+    }
+    return body;
+  }
   async function load(){
     if(!configured())return localLoad();
-    const rows=await rest('/rest/v1/panorama_pedidos_catalog?select=catalog&eq.id=1');
-    const catalog=rows?.[0]?.catalog||[]; if(catalog.length)localSave(catalog); return catalog;
+    try{const rows=await rest('/rest/v1/panorama_pedidos_catalog?select=catalog&eq.id=1');const catalog=rows?.[0]?.catalog||[];if(catalog.length)localSave(catalog);return catalog}
+    catch(e){return localLoad()}
   }
   async function loadStatic(){
     if(embedded.length)return clone(embedded);
@@ -40,18 +64,13 @@
   async function loadOrders(){const rows=await rest('/rest/v1/panorama_pedidos_orders?select=*&order=created_at.desc');return(rows||[]).map(mapOrder)}
   function subscribeOrders(cb){
     if(!configured())return()=>{}; let stopped=false;
-    const tick=async()=>{try{const rows=await loadOrders();if(!stopped)cb(rows)}catch(e){}};
+    const tick=async()=>{try{const rows=await loadOrders();if(!stopped)cb(rows)}catch(e){if(!stopped&&e.message)console.warn(e.message)}};
     tick(); const id=setInterval(tick,2500); return()=>{stopped=true;clearInterval(id)};
   }
   async function updateOrderStatus(orderId,status,extra={}){await rest('/rest/v1/panorama_pedidos_orders?order_id=eq.'+encodeURIComponent(orderId),{method:'PATCH',headers:Object.assign({},authHeaders(),{'Prefer':'return=minimal'}),body:JSON.stringify(Object.assign({status,status_updated_at:new Date().toISOString()},extra))})}
-  async function signIn(email,password){
-    const r=await fetch(base()+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.key},body:JSON.stringify({email,password})});
-    let body=null;try{body=await r.json()}catch(e){} if(!r.ok)throw new Error(body?.error_description||body?.msg||'No se pudo iniciar sesión.');
-    localStorage.setItem(SESSION_KEY,JSON.stringify(body)); return body;
-  }
-  async function signOut(){localStorage.removeItem(SESSION_KEY)}
-  async function getSession(){return session()}
+  async function signOut(){localStorage.removeItem(SESSION_KEY);location.reload()}
+  function session(){return getStoredSession()}
   function getSettings(){try{return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')}catch(e){return{}}}
   function saveSettings(s){localStorage.setItem(SETTINGS_KEY,JSON.stringify(s||{}));return getSettings()}
-  window.PanoramaCatalog={initial:embedded,load,loadStatic,save,reset:()=>{localStorage.removeItem(CATALOG_KEY);return localLoad()},clone,remoteConfigured:configured,subscribeCatalog,saveOrder,subscribeOrders,updateOrderStatus,getSettings,saveSettings,signIn,signOut,session:getSession,CATALOG_KEY,SETTINGS_KEY};
+  window.PanoramaCatalog={initial:embedded,load,loadStatic,save,reset:()=>{localStorage.removeItem(CATALOG_KEY);return localLoad()},clone,remoteConfigured:configured,subscribeCatalog,saveOrder,subscribeOrders,updateOrderStatus,getSettings,saveSettings,signIn,signOut,session,CATALOG_KEY,SETTINGS_KEY};
 })();
