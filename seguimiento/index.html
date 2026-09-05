@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1C1410">
+<title>Panorama Café · Seguimiento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1C1410;--paper:#FBF6EC;--dim:#F1E9D8;--gold:#E2A33B;--pine:#2F5D50;--rust:#B4472B;--line:#E4D9C2;--muted:#7A6D5C}*{box-sizing:border-box}body{margin:0;background:var(--ink);font-family:Manrope,sans-serif;color:var(--ink)}.app{max-width:560px;min-height:100vh;margin:auto;background:var(--paper)}header{background:linear-gradient(180deg,var(--ink),#2C2018);color:var(--paper);padding:26px 20px 24px}h1{font:600 28px/1 Fraunces,serif;margin:0}.eyebrow{font-size:11px;color:var(--gold);font-weight:900;letter-spacing:.5px;margin:5px 0 0}.sub{color:#d8cec0;font-size:12px;line-height:1.5;margin:15px 0 0}.wrap{padding:18px 16px 34px}.card{background:#fffdf9;border:1px solid var(--line);border-radius:17px;padding:18px;margin-bottom:12px;box-shadow:0 5px 18px #0000000a}.center{text-align:center}.icon{width:66px;height:66px;border-radius:50%;background:rgba(47,93,80,.1);color:var(--pine);display:grid;place-items:center;font-size:30px;margin:2px auto 12px}.order{font-size:12px;color:var(--muted);font-weight:900}.status{font:600 25px Fraunces,serif;margin:6px 0}.message{font-size:12px;line-height:1.55;color:#6E6153;margin:0}.timeline{margin-top:17px}.row{display:flex;gap:11px;align-items:flex-start;padding:9px 0}.dot{width:11px;height:11px;border-radius:50%;background:var(--line);margin-top:3px;flex:0 0 auto}.row.done .dot{background:var(--pine)}.row.current .dot{background:var(--gold);box-shadow:0 0 0 5px rgba(226,163,59,.14)}.rtext{font-size:12.5px;font-weight:800}.rtime{font-size:10.5px;color:var(--muted);margin-top:2px}.items{border-top:1px solid var(--line);margin-top:7px;padding-top:8px}.item{padding:6px 0;font-size:12px}.mods{font-size:10.5px;color:var(--muted);margin:2px 0 0 18px}.total{display:flex;justify-content:space-between;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-weight:900}.small{font-size:10.5px;color:var(--muted);line-height:1.5}.btn{width:100%;border:0;border-radius:12px;padding:12px;background:var(--pine);color:var(--paper);font-weight:900;font-size:13px;cursor:pointer}.secondary{margin-top:8px;background:var(--dim);color:var(--ink)}.error{color:var(--rust);font-weight:800;font-size:13px;line-height:1.5}.loading{padding:28px 5px;text-align:center;color:var(--muted);font-size:12px}.footer{text-align:center;padding:14px 20px 32px;color:var(--muted);font-size:10.5px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="app">
+<header><h1>Panorama Café</h1><div class="eyebrow">SEGUIMIENTO DE PEDIDO</div><p class="sub">Consulta el estado de tu pedido sin crear una cuenta.</p></header>
+<main class="wrap"><div id="view" class="card"><div class="loading">Consultando tu pedido…</div></div></main>
+<div class="footer">Este enlace es privado y corresponde únicamente a tu pedido. No compartas el enlace si no deseas que otra persona vea su estado.</div>
+</div>
+<script src="../firebase-config.js?v=20260904d"></script>
+<script>
+'use strict';
+const cfg=window.PANORAMA_SUPABASE||{},base=String(cfg.url||'').replace(/\/$/,''),view=document.getElementById('view');
+const params=new URLSearchParams(location.search);let token=params.get('token')||'';try{if(!token){const x=JSON.parse(localStorage.getItem('panorama_order_tracking_v1')||'null');token=x?.token||''}}catch(e){}
+const labels={pending_confirmation:'Pedido recibido',accepted:'Pedido confirmado',preparing:'En preparación',ready:'Listo para entregar',completed:'Pedido completado',cancelled:'Pedido cancelado'};
+const orderStates=['pending_confirmation','accepted','preparing','ready','completed'];
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+const money=n=>n==null?'Precio a confirmar':'$'+Number(n).toFixed(2);
+function render(o){
+ const idx=orderStates.indexOf(o.status), cancelled=o.status==='cancelled';
+ const rows=cancelled?['pending_confirmation','cancelled']:orderStates;
+ const timeline=rows.map((s,i)=>{const done=!cancelled&&idx>=0&&i<idx;const current=s===o.status;return '<div class="row '+(done?'done ':'')+(current?'current':'')+'"><span class="dot"></span><div><div class="rtext">'+esc(labels[s]||s)+'</div>'+(current?'<div class="rtime">Actualizado '+new Date(o.statusUpdatedAt).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'})+'</div>':'')+'</div></div>'}).join('');
+ const items=(o.items||[]).map(i=>'<div class="item"><b>'+esc(i.quantity)+'×</b> '+esc(i.product)+(i.variant?' · '+esc(i.variant):'')+(i.modifiers?.length?'<div class="mods">'+i.modifiers.map(m=>esc(m.name)).join(' · ')+'</div>':'')+'</div>').join('');
+ view.innerHTML='<div class="center"><div class="icon">'+(cancelled?'!':'✓')+'</div><div class="order">'+esc(o.orderId)+'</div><div class="status">'+esc(labels[o.status]||o.status)+'</div><p class="message">'+(cancelled?'Tu pedido fue cancelado. Si necesitas ayuda, comunícate con Panorama Café.':o.status==='completed'?'Gracias por tu visita. ¡Esperamos verte pronto!':'El estado se actualiza automáticamente mientras Panorama Café procesa tu pedido.')+'</p></div><div class="timeline">'+timeline+'</div><div class="items">'+items+'</div>'+(o.pricing?'<div class="total"><span>Total</span><span>'+money(o.pricing.total)+(o.pricing.hasVariableItems?' + por confirmar':'')+'</span></div>':'')+'<p class="small">Cliente: '+esc(o.customer?.name||'Cliente')+' · '+(o.fulfillment?.type==='dinein'?'Mesa '+esc(o.fulfillment.table||'?'):'Para llevar')+'</p><button class="btn" onclick="load()">Actualizar estado</button><button class="btn secondary" onclick="location.href=\'../\'">Volver al menú</button>';
+}
+async function load(){
+ if(!token){view.innerHTML='<div class="error">No encontramos un enlace de seguimiento. Abre el enlace que recibiste después de enviar tu pedido.</div><button class="btn secondary" onclick="location.href=\'../\'">Volver al menú</button>';return}
+ try{const r=await fetch(base+'/functions/v1/track-order',{method:'POST',headers:{'Content-Type':'application/json','apikey':cfg.key},body:JSON.stringify({token})});const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b?.error||'No encontramos ese pedido.');render(b)}catch(e){view.innerHTML='<div class="error">'+esc(e.message||'No se pudo consultar el pedido.')+'</div><button class="btn secondary" onclick="load()">Intentar de nuevo</button>'}
+}
+load();setInterval(load,5000);
+</script>
+</body>
+</html>
